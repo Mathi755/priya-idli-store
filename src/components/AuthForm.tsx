@@ -19,12 +19,48 @@ const AuthForm = ({ userType }: AuthFormProps) => {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
+  const checkAdminCount = async () => {
+    if (userType !== 'admin') return true;
+    
+    try {
+      const { count, error } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'admin');
+      
+      if (error) throw error;
+      
+      if (count && count >= 2) {
+        toast({
+          title: "Registration Limit Reached",
+          description: "Only 2 admin accounts are allowed. Please contact support if you need assistance.",
+          variant: "destructive",
+        });
+        return false;
+      }
+      
+      return true;
+    } catch (error: any) {
+      console.error('Error checking admin count:', error);
+      return true; // Allow registration if check fails
+    }
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
       if (isSignUp) {
+        // Check admin limit before signup
+        if (userType === 'admin') {
+          const canRegister = await checkAdminCount();
+          if (!canRegister) {
+            setLoading(false);
+            return;
+          }
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -61,13 +97,38 @@ const AuthForm = ({ userType }: AuthFormProps) => {
 
         if (error) throw error;
 
-        toast({
-          title: "Welcome back!",
-          description: "You have been signed in successfully.",
-        });
+        // Check user role and redirect accordingly
+        if (data.user) {
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', data.user.id)
+            .single();
 
-        // Redirect based on user type
-        window.location.href = userType === 'admin' ? '/admin' : '/products';
+          if (profileError) {
+            console.error('Error fetching profile:', profileError);
+          }
+
+          // Verify user has correct role for the page they're trying to access
+          if (profileData?.role !== userType) {
+            await supabase.auth.signOut();
+            toast({
+              title: "Access Denied",
+              description: `This page is for ${userType}s only. Please use the correct login page.`,
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
+
+          toast({
+            title: "Welcome back!",
+            description: "You have been signed in successfully.",
+          });
+
+          // Redirect based on user type
+          window.location.href = userType === 'admin' ? '/admin' : '/products';
+        }
       }
     } catch (error: any) {
       toast({
@@ -88,6 +149,11 @@ const AuthForm = ({ userType }: AuthFormProps) => {
         </CardTitle>
         <CardDescription className="text-center">
           {isSignUp ? 'Create your account' : 'Welcome back'}
+          {userType === 'admin' && isSignUp && (
+            <span className="block text-orange-600 mt-2 text-sm">
+              Note: Only 2 admin accounts are allowed
+            </span>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent>

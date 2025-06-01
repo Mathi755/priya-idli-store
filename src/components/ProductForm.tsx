@@ -23,6 +23,11 @@ const ProductForm = ({ onProductAdded }: { onProductAdded: () => void }) => {
     setLoading(true);
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('You must be logged in to add products');
+      }
+
       const featuresArray = features.split(',').map(f => f.trim()).filter(f => f);
       
       const { error } = await supabase
@@ -32,9 +37,11 @@ const ProductForm = ({ onProductAdded }: { onProductAdded: () => void }) => {
           description,
           price: parseFloat(price),
           original_price: originalPrice ? parseFloat(originalPrice) : null,
-          image_url: imageUrl,
-          category,
-          features: featuresArray,
+          image_url: imageUrl || null,
+          category: category || null,
+          features: featuresArray.length > 0 ? featuresArray : null,
+          created_by: user.id,
+          in_stock: true
         });
 
       if (error) throw error;
@@ -74,12 +81,13 @@ const ProductForm = ({ onProductAdded }: { onProductAdded: () => void }) => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Product Name</Label>
+              <Label htmlFor="name">Product Name *</Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
+                placeholder="Enter product name"
               />
             </div>
             <div className="space-y-2">
@@ -99,21 +107,23 @@ const ProductForm = ({ onProductAdded }: { onProductAdded: () => void }) => {
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full min-h-[100px] px-3 py-2 border border-gray-300 rounded-md"
+              className="w-full min-h-[100px] px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Product description..."
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="price">Price (₹)</Label>
+              <Label htmlFor="price">Price (₹) *</Label>
               <Input
                 id="price"
                 type="number"
                 step="0.01"
+                min="0"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 required
+                placeholder="0.00"
               />
             </div>
             <div className="space-y-2">
@@ -122,6 +132,7 @@ const ProductForm = ({ onProductAdded }: { onProductAdded: () => void }) => {
                 id="originalPrice"
                 type="number"
                 step="0.01"
+                min="0"
                 value={originalPrice}
                 onChange={(e) => setOriginalPrice(e.target.value)}
                 placeholder="Optional"

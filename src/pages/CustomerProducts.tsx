@@ -140,7 +140,7 @@ const CustomerProducts = () => {
             ))}
           </div>
         )}
-      </main>
+      </div>
     </div>
   );
 };

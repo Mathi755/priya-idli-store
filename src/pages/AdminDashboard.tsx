@@ -23,7 +23,40 @@ interface Product {
 const AdminDashboard = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const checkUserRole = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        window.location.href = '/admin-auth';
+        return;
+      }
+
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (error || profile?.role !== 'admin') {
+        toast({
+          title: "Access Denied",
+          description: "You must be an admin to access this page.",
+          variant: "destructive",
+        });
+        await supabase.auth.signOut();
+        window.location.href = '/admin-auth';
+        return;
+      }
+
+      setUserRole(profile.role);
+    } catch (error) {
+      console.error('Error checking user role:', error);
+      window.location.href = '/admin-auth';
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -37,7 +70,7 @@ const AdminDashboard = () => {
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to fetch products",
+        description: "Failed to fetch products: " + error.message,
         variant: "destructive",
       });
     } finally {
@@ -75,10 +108,16 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
-    fetchProducts();
+    checkUserRole();
   }, []);
 
-  if (loading) {
+  useEffect(() => {
+    if (userRole === 'admin') {
+      fetchProducts();
+    }
+  }, [userRole]);
+
+  if (loading || !userRole) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-xl">Loading...</div>
@@ -130,6 +169,7 @@ const AdminDashboard = () => {
                           <h3 className="font-semibold">{product.name}</h3>
                           <p className="text-sm text-gray-600">{product.category}</p>
                           <p className="text-lg font-bold text-green-600">₹{product.price}</p>
+                          <p className="text-xs text-gray-500">Stock: {product.in_stock ? 'Available' : 'Out of Stock'}</p>
                         </div>
                       </div>
                       <div className="flex space-x-2">
